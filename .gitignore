@@ -1,0 +1,23 @@
+#subfolder .gits
+
+#ignore train and validation records (see README.md)
+*/train-*
+*/validation-*
+
+#ignore checkpoints folder
+*/checkpoints/
+
+#other artifact folders
+*/.ipynb_checkpoints/
+
+#ignore dask implementation
+tf-dask/
+
+#tf-dist artifact dirs
+*/error/
+*/logs/
+*/output/
+*/MNIST_data/
+*/.idea
+*/_pycache_/
+

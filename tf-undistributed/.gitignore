@@ -1,0 +1,10 @@
+#ignore train and validation records (see README.md)
+train-*
+validation-*
+
+#ignore checkpoints folder
+checkpoints/
+
+#ignore .ipynb_checkpoints folder
+.ipynb_checkpoints/
+
