@@ -53,4 +53,5 @@ where c002-n001 can be replaced with the hostname of the node allocated for the 
 ## Running Inference and Validation
 Inference and validation to be implemented.
 
-
+## References
+Sergeev, A., Del Balso, M. (2018) Horovod: fast and easy distributed deep learning in TensorFlow. arXiv:1802.05799 https://github.com/uber/horovod
