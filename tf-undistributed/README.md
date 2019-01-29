@@ -1,4 +1,4 @@
-# tf-horovod
+# tf-undistributed
 
 # Usage
 
@@ -18,21 +18,17 @@ trainer.py uses the training shards created as the input data.
 The dataset used with this script can be found here:
 * [Distracted Driver TFRecord Dataset](https://drive.google.com/open?id=1FYrVAszEFMNTUdObK8SrKOqM8bwVxSPl)
 
-## Setting up Horovod
-If you have not set up a Horovod environment, you can use the setup_horovod.sh script to do so.
-Run the script through an interactive terminal and select the first option to set up a Horovod environment with the name 'hvd'.
 
 ## Run Training
-Once you have a conda environment, use 'qsub -I' to log into a compute node on the cluster and cd back into the working folder.  Activate your hvd environment and run the command:
+Run the following in a TensorFlow environment to start training:
 ```
-mpirun python trainer.py
+python trainer.py
 ```
-
-For multinode training, you can allocate several nodes using torque.  An example using 4 nodes:
-```
-qsub -I -lnodes=4
-```
-Then run the call to MPI above.
+The following parameters may be set:
+--omp			OMP_NUM_THREADS, default 32
+--interop		inter_op_parallelism_threads, default 2
+--intraop		intra_op_parallelism_threads, default 32
+--stop_at_step	stop training at global step, default 20000
 
 
 ## Remote Tensorboard Setup

@@ -27,6 +27,11 @@ Once you have a conda environment, use 'qsub -I' to log into a compute node on t
 ```
 mpirun python trainer.py
 ```
+The following parameters may be set:
+--omp			OMP_NUM_THREADS, default 32
+--interop		inter_op_parallelism_threads, default 2
+--intraop		intra_op_parallelism_threads, default 32
+--stop_at_step	stop training at global step, default 20000
 
 For multinode training, you can allocate several nodes using torque.  An example using 4 nodes:
 ```
