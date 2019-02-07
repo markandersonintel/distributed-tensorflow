@@ -189,7 +189,7 @@ def main(_):
                                            save_checkpoint_steps=50,
                                            hooks=hooks,
                                            config=config) as mon_sess:
-        print('starting training session')
+        print('starting monitored training session')
 
         #feed_dict= {x: np.zeros([1,input_height,input_width,depth_in], dtype=np.float32), y: np.zeros([1,n_classes], dtype=np.float32), keep_prob: 1.0}
 
@@ -200,7 +200,6 @@ def main(_):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.register("type", "bool", lambda v: v.lower() == "true")
-
     parser.add_argument(
         "--interop",
         type=int,

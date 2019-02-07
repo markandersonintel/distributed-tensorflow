@@ -8,6 +8,7 @@ declare -a jobs=(
 "_wk0.sh"
 "_wk1.sh"
 "_wk2.sh"
+"_wk3.sh"
 )
 #output the jobcount to a file
 echo "nodecount:" ${#jobs[@]} >> nodes
