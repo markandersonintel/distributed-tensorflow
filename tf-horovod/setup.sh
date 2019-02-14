@@ -2,6 +2,11 @@
 env_name="hvd"
 #environment variables
 
+mkdir ~/lib
+cd ~/lib
+ln -s /glob/supplementary-software/versions/glibc/glibc_2_28/lib/libm.so.6 
+export LD_LIBRARY_PATH=~/lib:$LD_LIBRARY_PATH
+
 export CC=/glob/development-tools/versions/gcc-7.3.0/bin/gcc 
 export LD_LIBRARY_PATH=/glob/development-tools/versions/gcc-7.3.0/lib64/:$LD_LIBRARY_PATH 
 export PATH=/glob/development-tools/versions/gcc-7.3.0/bin/:$PATH 
@@ -24,29 +29,23 @@ function install_env() {
 	else
 		echo "Anaconda previously installed."
 	fi
-
-	#conda environment configuration
-	conda config --add channels intel
 	if ! [ `conda env list | grep $env_name | wc -l` -eq 1 ]
 	then
 		echo "creating environment '$env_name'.."
-		conda create -n $env_name python=3.6 tensorflow-mkl absl-py -y
+		conda create -n $env_name -c intel python=3.6 tensorflow-mkl=1.10 absl-py -y
 	else
 		source activate $env_name
-	fi
-	if [ `conda list | grep "absl" | wc -l` -lt 1 ]
-	then
-		conda install absl-py
 	fi
 	if [ `conda list | grep "tensorflow-mkl" | wc -l` -lt 1 ]
 	then
 		conda install tensorflow-mkl
 	fi
 	CFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" pip install --upgrade --user --no-cache-dir horovod 
-
+}
+function run_benchmark() {
 	#check for benchmarking repo
 	cd ~/
-	if [ `find benchmarks/scripts/tf_cnn_benchmarks/tf_cnn_benchmarks.py | grep "No such file" | wc -l` -eq 0 ]
+	if [ -f ~/benchmarks/scripts/tf_cnn_benchmarks/tf_cnn_benchmarks.py ]
 	then
 		echo TensorFlow benchmarks previously installed.
 	else
@@ -54,8 +53,7 @@ function install_env() {
 	fi
 	cd benchmarks
 	git checkout cnn_tf_v1.10_compatible
-}
-function run_benchmark() {
+
 	source activate $env_name
 
 	#get number of physical cores
