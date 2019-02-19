@@ -2,11 +2,14 @@
 env_name="hvd"
 #environment variables
 
-mkdir ~/lib
+cwd=$PWD
+#mkdir ~/lib
 cd ~/lib
 ln -s /glob/supplementary-software/versions/glibc/glibc_2_28/lib/libm.so.6 
 export LD_LIBRARY_PATH=~/lib:$LD_LIBRARY_PATH
+cd $cwd
 
+#changed to 6.4
 export CC=/glob/development-tools/versions/gcc-7.3.0/bin/gcc 
 export LD_LIBRARY_PATH=/glob/development-tools/versions/gcc-7.3.0/lib64/:$LD_LIBRARY_PATH 
 export PATH=/glob/development-tools/versions/gcc-7.3.0/bin/:$PATH 
@@ -16,6 +19,7 @@ source /glob/development-tools/parallel-studio/impi/2018.3.222/bin64/mpivars.sh
 
 #install conda
 function install_env() {
+	CFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" pip install --upgrade --force-reinstall --user --no-cache-dir horovod
 	if [ `conda --version | grep "command not found" | wc -l` -eq 1 ]
 	then
 		cd ~/
@@ -32,15 +36,15 @@ function install_env() {
 	if ! [ `conda env list | grep $env_name | wc -l` -eq 1 ]
 	then
 		echo "creating environment '$env_name'.."
-		conda create -n $env_name -c intel python=3.6 tensorflow-mkl=1.10 absl-py -y
+		conda create -n $env_name -c intel python=3.6 tensorflow=1.10 absl-py -y
 	else
 		source activate $env_name
 	fi
 	if [ `conda list | grep "tensorflow-mkl" | wc -l` -lt 1 ]
 	then
-		conda install tensorflow-mkl
+		conda install tensorflow=1.10
 	fi
-	CFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" pip install --upgrade --user --no-cache-dir horovod 
+
 }
 function run_benchmark() {
 	#check for benchmarking repo
@@ -57,8 +61,8 @@ function run_benchmark() {
 	source activate $env_name
 
 	#get number of physical cores
-	cores_per_socket=`lscpu | grep "Core(s)" | sed "s/^.*\([0-9]\{2\}[0-9]*\)$/\1/"`
-	sockets=`lscpu | grep "Socket(s)" | sed "s/^.*\([0-9]\)$/\1/"`
+	cores_per_socket=`lscpu | grep "Core(s) per socket" | sed "s/[^0-9]*//g"`
+	sockets=`lscpu | grep "Socket(s)" | sed "s/[^0-9]*//g"`
 	num_cores=$(($cores_per_socket * $sockets))
 
 	#environment variables (mpirun)
@@ -76,10 +80,12 @@ else
 	#menu
 	while true; do
 	read -p "Menu: [I]nstall environment [R]un benchmark [Q]uit	" input
+	cwd=$PWD
 	case $input in
 		[Ii]* ) install_env; break;;
 		[Rr]* ) run_benchmark; break;;
 		[Qq]* ) break;;
 	esac
+	cd $cwd	
 	done
 fi
