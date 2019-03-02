@@ -19,7 +19,6 @@ source /glob/development-tools/parallel-studio/impi/2018.3.222/bin64/mpivars.sh
 
 #install conda
 function install_env() {
-	CFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" pip install --upgrade --force-reinstall --user --no-cache-dir horovod
 	if [ `conda --version | grep "command not found" | wc -l` -eq 1 ]
 	then
 		cd ~/
@@ -36,15 +35,11 @@ function install_env() {
 	if ! [ `conda env list | grep $env_name | wc -l` -eq 1 ]
 	then
 		echo "creating environment '$env_name'.."
-		conda create -n $env_name -c intel python=3.6 tensorflow=1.10 absl-py -y
-	else
-		source activate $env_name
+		conda create -n $env_name -c intel python=3.6
 	fi
-	if [ `conda list | grep "tensorflow-mkl" | wc -l` -lt 1 ]
-	then
-		conda install tensorflow=1.10
-	fi
-
+	source activate $env_name
+	pip install https://storage.googleapis.com/intel-optimized-tensorflow/tensorflow-1.10.0-cp36-cp36m-linux_x86_64.whl --no-cache-dir
+	CFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" pip install --upgrade --force-reinstall --user --no-cache-dir horovod	
 }
 function run_benchmark() {
 	#check for benchmarking repo
