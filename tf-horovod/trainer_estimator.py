@@ -10,17 +10,11 @@ import horovod.tensorflow as hvd
 import socket
 
 FLAGS = None
-tf.logging.set_verbosity(tf.logging.INFO)
-print(socket.gethostname())
 
-learning_rate = 0.00001
-epochs = 200
-batch_size = 16
-num_batches = int(24000/batch_size) #replace with n/batch_size
+default_batchsize = 16
 input_height = 480
 input_width = 640
 n_classes = 10
-dropout = 0.3
 display_step = 1
 filter_size = 3
 depth_in = 3
@@ -28,10 +22,12 @@ depth_out1 = 16
 depth_out2 = 32
 depth_out3 = 64
 dense_ct = 256
-stop_step = 40
+
+tf.logging.set_verbosity(tf.logging.INFO)
+print(socket.gethostname())
 
 #input function to read from TFRecord database (created using tf inception's build_image_data.py)
-def dataset_input_fn(dir=os.getcwd(), prefix='train-',batch_size=batch_size):
+def dataset_input_fn(dir=os.getcwd(), prefix='train-', batch_size=default_batchsize):
     filenames = [dir+'/'+f for f in os.listdir(dir) if f.startswith(prefix)]
     print(f for f in filenames)
     if len(filenames) < 1:
@@ -69,7 +65,7 @@ def dataset_input_fn(dir=os.getcwd(), prefix='train-',batch_size=batch_size):
     return features, labels
 
 def train_dataset_input_fn():
-    return dataset_input_fn(prefix='train-')
+    return dataset_input_fn(prefix='train-', batch_size=FLAGS.batch_size)
 def eval_dataset_input_fn():
     return dataset_input_fn(prefix='validation-',batch_size=1)
 
@@ -102,12 +98,12 @@ def conv_net(features, labels, mode):
     with tf.name_scope('fully_connected_1'):
         h_fc1 = layers.dropout(
             layers.dense(h_pool3_flat, dense_ct, activation=tf.nn.relu),
-            rate=dropout, training=mode == tf.estimator.ModeKeys.TRAIN)
+            rate=FLAGS.dropout, training=mode == tf.estimator.ModeKeys.TRAIN)
 
     with tf.name_scope('fully_connected_2'):
         h_fc2 = layers.dropout(
             layers.dense(h_fc1, dense_ct, activation=tf.nn.relu),
-            rate=dropout, training=mode == tf.estimator.ModeKeys.TRAIN)
+            rate=FLAGS.dropout, training=mode == tf.estimator.ModeKeys.TRAIN)
 
     # Compute logits (1 per class) and compute loss.
     logits = layers.dense(h_fc2, n_classes, activation=None)
@@ -120,6 +116,13 @@ def conv_net(features, labels, mode):
         # `logging_hook`.
         "probabilities": tf.nn.softmax(logits, name="softmax_tensor")
     }
+
+    #logging
+    #hostname for logging
+    host = tf.constant(socket.gethostname(), name='host')
+    hvd_rank = tf.constant(hvd.rank(), name='hvd_rank')
+    hvd_size = tf.constant(hvd.size(), name='hvd_size')
+
     if mode == tf.estimator.ModeKeys.PREDICT:
         return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
@@ -128,25 +131,24 @@ def conv_net(features, labels, mode):
     loss = tf.losses.softmax_cross_entropy(
         onehot_labels=onehot_labels, logits=logits)
 
+    accuracy = tf.metrics.accuracy(
+        labels=labels, predictions=predictions["classes"])
+    tf.summary.scalar('accuracy', accuracy[0])
+
     # Configure the Training Op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
         # Horovod: scale learning rate by the number of workers.
         optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.001 * hvd.size())
-
-        # Horovod: add Horovod Distributed Optimizer.
+            learning_rate=FLAGS.learning_rate * hvd.size())
         optimizer = hvd.DistributedOptimizer(optimizer)
-
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
         return tf.estimator.EstimatorSpec(mode=mode, loss=loss,
                                           train_op=train_op)
-
-    # Add evaluation metrics (for EVAL mode)
-    eval_metric_ops = {
-        "accuracy": tf.metrics.accuracy(
-            labels=labels, predictions=predictions["classes"])}
+    # mode == tf.estimator.ModeKeys.EVAL
+    #accuracy calculated for EVAL
+    eval_metric_ops = {'accuracy':accuracy}
     return tf.estimator.EstimatorSpec(
         mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
 
@@ -177,8 +179,6 @@ def main(unused_argv):
     tfrecord_estimator = tf.estimator.Estimator(
         model_fn=conv_net, model_dir=model_dir,
         config=tf.estimator.RunConfig(session_config=config))
-    #hostname for logging
-    host = tf.constant(socket.gethostname())
 
     # Set up logging for predictions
     # Log the values in the "Softmax" tensor with label "probabilities"
@@ -189,22 +189,27 @@ def main(unused_argv):
         # initialization of all workers when training is started with random weights
         # or restored from a checkpoint.
         hvd.BroadcastGlobalVariablesHook(0),
-
-        # Horovod: adjust number of steps based on number of GPUs.
-        # tf.train.LoggingTensorHook(tensors={'probabilities': 'softmax_tensor',
-        #                                     'loss': 'loss'})
-        tf.train.CheckpointSaverHook(checkpoint_dir='checkpoints/trainer_estimator/',save_steps=50)
+        tf.train.LoggingTensorHook(['host','hvd_rank','hvd_size'],
+                                   every_n_iter=FLAGS.log_n_iters),
         ]
-
+    if hvd.rank() == 0:
+        hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir='checkpoints/trainer_estimator/',save_steps=50))
     # Horovod: adjust number of steps based on number of GPUs.
-    tfrecord_estimator.train(
-        input_fn=train_dataset_input_fn,
-        hooks=hooks,
-        steps=stop_step)
+    estimator_config={
+        'input_fn':train_dataset_input_fn,
+        'hooks':hooks
+    }
+    if FLAGS.stop_at_step:
+        estimator_config['steps'] = FLAGS.stop_at_step
 
-    # Evaluate the model and print results
-    # eval_results = tfrecord_estimator.evaluate(input_fn=eval_dataset_input_fn, step=10)
-    # print(eval_results)
+    if FLAGS.validation == False:
+        tfrecord_estimator.train(**estimator_config)
+    else:
+        ## If evaluating, run only on a single node.
+        if hvd.rank() == 0:
+            #Evaluate the model and print results
+            eval_results = tfrecord_estimator.evaluate(input_fn=eval_dataset_input_fn,steps=1000)
+            print(eval_results)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -234,12 +239,42 @@ if __name__ == "__main__":
         help="Stop training at step"
     )
     parser.add_argument(
+        "--log_n_iters",
+        type=int,
+        default=50,
+        help="Log information after n iterations"
+    )
+    parser.add_argument(
         "--log_dir",
         type=str,
         default="./checkpoints",
         help="Directory for logging"
     )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=16,
+        help="batch size"
+    )
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=0.01,
+        help="learning rate, will scale with hvd.size()"
+    )
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        default=0.3,
+        help="dropout rate for fully connected layers"
+    )
+    parser.add_argument(
+        "--validation",
+        action='store_true',
+        default=False,
+        help="Use to run validation"
+    )
+    ##TODO: add epochs if required
+
     FLAGS, unparsed = parser.parse_known_args()
     tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
-
-

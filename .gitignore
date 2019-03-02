@@ -21,3 +21,7 @@ tf-dask/
 */.idea
 */_pycache_/
 
+#horovod artifacts
+*/eval/
+*/events.out*
+*/tensorboard.sh*
