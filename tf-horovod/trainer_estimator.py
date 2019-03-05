@@ -132,8 +132,10 @@ def conv_net(features, labels, mode):
         onehot_labels=onehot_labels, logits=logits)
 
     accuracy = tf.metrics.accuracy(
-        labels=labels, predictions=predictions["classes"])
-    tf.summary.scalar('accuracy', accuracy[0])
+        labels=labels, predictions=tf.argmax(input=logits, axis=1), name='accuracy')
+    tf.summary.scalar('accuracy', accuracy[1])
+    log_hook = tf.train.LoggingTensorHook({'accuracy':accuracy[1]},
+                               every_n_iter=FLAGS.log_n_iters)
 
     # Configure the Training Op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
@@ -145,7 +147,8 @@ def conv_net(features, labels, mode):
             loss=loss,
             global_step=tf.train.get_global_step())
         return tf.estimator.EstimatorSpec(mode=mode, loss=loss,
-                                          train_op=train_op)
+                                          train_op=train_op,
+                                          training_hooks=[log_hook])
     # mode == tf.estimator.ModeKeys.EVAL
     #accuracy calculated for EVAL
     eval_metric_ops = {'accuracy':accuracy}
@@ -153,6 +156,7 @@ def conv_net(features, labels, mode):
         mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
 
 def main(unused_argv):
+    tf.logging.set_verbosity(tf.logging.INFO)
     if FLAGS.omp:
         os.environ['OMP_NUM_THREADS']=str(FLAGS.omp)
     # Horovod: initialize Horovod.
@@ -197,7 +201,7 @@ def main(unused_argv):
     # Horovod: adjust number of steps based on number of GPUs.
     estimator_config={
         'input_fn':train_dataset_input_fn,
-        'hooks':hooks
+        'hooks':hooks,
     }
     if FLAGS.stop_at_step:
         estimator_config['steps'] = FLAGS.stop_at_step
